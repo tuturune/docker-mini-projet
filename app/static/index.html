@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Analyse de sentiment</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #1f2937; }
+    textarea { width: 100%; min-height: 110px; font: inherit; padding: .6rem; box-sizing: border-box; }
+    button { margin-top: .6rem; padding: .5rem 1.2rem; font: inherit; cursor: pointer; }
+    #result { margin-top: 1rem; font-size: 1.2rem; min-height: 1.5rem; }
+    .positif { color: #15803d; } .negatif { color: #b91c1c; } .erreur { color: #b45309; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; font-size: .9rem; }
+    td, th { border-bottom: 1px solid #e5e7eb; padding: .4rem; text-align: left; vertical-align: top; }
+    small { color: #6b7280; }
+  </style>
+</head>
+<body>
+  <h1>Analyse de sentiment d'avis de films</h1>
+  <p><small>Écrivez un avis en français : le modèle indique s'il est positif ou négatif.</small></p>
+  <textarea id="text" placeholder="Un film magnifique, des acteurs excellents…"></textarea>
+  <button id="send">Analyser</button>
+  <div id="result"></div>
+
+  <h2>Dernières prédictions</h2>
+  <table>
+    <thead><tr><th>Avis</th><th>Sentiment</th><th>Confiance</th><th>Modèle</th></tr></thead>
+    <tbody id="history"></tbody>
+  </table>
+
+  <script>
+    const result = document.getElementById("result");
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+    }
+
+    async function loadHistory() {
+      const res = await fetch("/history?limit=10");
+      if (!res.ok) return;
+      const rows = await res.json();
+      document.getElementById("history").innerHTML = rows.map(r =>
+        `<tr><td>${escapeHtml(r.text.slice(0, 120))}</td><td class="${r.label}">${r.label}</td>` +
+        `<td>${(r.confidence * 100).toFixed(1)} %</td><td>${r.model_version}</td></tr>`
+      ).join("");
+    }
+
+    document.getElementById("send").addEventListener("click", async () => {
+      const text = document.getElementById("text").value.trim();
+      result.className = ""; result.textContent = "Analyse en cours…";
+      try {
+        const res = await fetch("/predict", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({text}),
+        });
+        if (!res.ok) throw new Error(`Erreur ${res.status}`);
+        const data = await res.json();
+        result.className = data.label;
+        result.textContent = `${data.label} (${(data.confidence * 100).toFixed(1)} % — modèle ${data.model_version})`;
+        loadHistory();
+      } catch (e) {
+        result.className = "erreur"; result.textContent = e.message;
+      }
+    });
+
+    loadHistory();
+  </script>
+</body>
+</html>
